@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentToken, secondsUntilReset } from '@/lib/qr';
 import { verifyAdminToken } from '@/lib/auth';
-import { APP_URL } from '@/lib/config';
 
 export async function GET(req: NextRequest) {
   if (!await verifyAdminToken(req)) {
@@ -9,5 +8,8 @@ export async function GET(req: NextRequest) {
   }
   const token = await currentToken();
   const secondsLeft = secondsUntilReset();
-  return NextResponse.json({ token, secondsLeft, appUrl: APP_URL });
+  // Auto-detect the app URL from the request (works in prod + local)
+  const origin = process.env.NEXT_PUBLIC_APP_URL
+    ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+  return NextResponse.json({ token, secondsLeft, appUrl: origin });
 }
