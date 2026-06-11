@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useConfig } from '@/lib/useConfig';
 
 function PremioContent() {
   const router = useRouter();
+  const config = useConfig();
   const params = useSearchParams();
   const code = params.get('code') ?? '';
-  const [seconds, setSeconds] = useState(600); // 10 min
+  const [seconds, setSeconds] = useState(1800); // 30 min — same as server-side code expiry
 
   useEffect(() => {
     if (!code) router.replace('/card');
@@ -40,7 +42,7 @@ function PremioContent() {
 
         {/* Prize description */}
         <div className="bg-pink-50 rounded-2xl p-4 mb-6 border border-pink-100">
-          <p className="text-gray-700 font-semibold">1 helado doble gratis 🍦</p>
+          <p className="text-gray-700 font-semibold">{config.rewardText}</p>
         </div>
 
         {/* Timer */}

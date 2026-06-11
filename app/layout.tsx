@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import SWRegister from './sw-register';
 
 export const metadata: Metadata = {
   title: 'Heladería El Paraíso',
@@ -30,10 +31,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className="h-full">
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icons/icon.svg" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-dvh gradient-bg">{children}</body>
+      <body className="min-h-dvh gradient-bg">
+        <SWRegister />
+        {children}
+      </body>
     </html>
   );
 }

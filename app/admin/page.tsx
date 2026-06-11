@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import QRCode from 'react-qr-code';
+import { useConfig } from '@/lib/useConfig';
 
 type Stats = {
   totalCustomers: number;
@@ -8,8 +10,11 @@ type Stats = {
   topCustomers: { name: string; stamps: number; totalCompleted: number }[];
 };
 
+type GrantInfo = { code: string; stamps: number; url: string; expiresInSeconds: number };
+
 export default function AdminPage() {
   const router = useRouter();
+  const config = useConfig();
   const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -19,6 +24,10 @@ export default function AdminPage() {
   const [validateMsg, setValidateMsg] = useState('');
   const [validateOk, setValidateOk] = useState<boolean | null>(null);
   const [validating, setValidating] = useState(false);
+  const [grantQty, setGrantQty] = useState(1);
+  const [grant, setGrant] = useState<GrantInfo | null>(null);
+  const [grantSeconds, setGrantSeconds] = useState(0);
+  const [granting, setGranting] = useState(false);
 
   const getToken = () => sessionStorage.getItem('adminToken') ?? '';
 
@@ -52,10 +61,43 @@ export default function AdminPage() {
       sessionStorage.setItem('adminToken', token);
       setAuthed(true);
     } else {
-      setLoginError('Contraseña incorrecta');
+      const data = await res.json().catch(() => null);
+      setLoginError(res.status === 429
+        ? (data?.error ?? 'Demasiados intentos. Espera 15 minutos.')
+        : 'Contraseña incorrecta');
     }
     setLoggingIn(false);
   }
+
+  async function handleGrant() {
+    setGranting(true);
+    const res = await fetch('/api/grant', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({ stamps: grantQty }),
+    });
+    if (res.ok) {
+      const data: GrantInfo = await res.json();
+      setGrant(data);
+      setGrantSeconds(data.expiresInSeconds);
+    }
+    setGranting(false);
+  }
+
+  // Grant QR countdown — hide the QR when it expires
+  useEffect(() => {
+    if (!grant) return;
+    const t = setInterval(() => {
+      setGrantSeconds(s => {
+        if (s <= 1) { setGrant(null); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [grant]);
 
   async function handleValidate(e: React.FormEvent) {
     e.preventDefault();
@@ -91,7 +133,7 @@ export default function AdminPage() {
         <div className="text-center mb-6">
           <div className="text-6xl mb-3">🍦</div>
           <h1 className="text-2xl font-bold text-gray-800">Panel Admin</h1>
-          <p className="text-gray-400 text-sm mt-1">Heladería El Paraíso</p>
+          <p className="text-gray-400 text-sm mt-1">{config.businessName}</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
@@ -123,7 +165,7 @@ export default function AdminPage() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-xl font-bold text-gray-800">Panel Admin 🍦</h1>
-            <p className="text-gray-400 text-sm">Heladería El Paraíso</p>
+            <p className="text-gray-400 text-sm">{config.businessName}</p>
           </div>
           <button onClick={() => router.push('/admin/qr')}
             className="gradient-btn text-white font-bold py-2 px-4 rounded-xl text-sm active:scale-95">
@@ -145,6 +187,63 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Grant stamps for a purchase */}
+        <div className="bg-white rounded-2xl p-5 card-shadow">
+          <h2 className="font-bold text-gray-700 mb-1">Dar sellos por compra 🧾</h2>
+          <p className="text-gray-400 text-xs mb-3">
+            Genera un QR de un solo uso con los sellos de la compra. Funciona aunque el
+            cliente ya haya ganado un sello hoy.
+          </p>
+
+          {!grant ? (
+            <>
+              <div className="flex gap-2 mb-3">
+                {Array.from({ length: config.maxGrantStamps }, (_, i) => i + 1).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setGrantQty(n)}
+                    className={`flex-1 py-2 rounded-xl font-bold text-lg transition-all active:scale-95 ${
+                      grantQty === n
+                        ? 'gradient-btn text-white'
+                        : 'bg-pink-50 text-pink-400 border border-pink-200'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleGrant}
+                disabled={granting}
+                className="w-full gradient-btn text-white font-bold py-3 rounded-xl
+                           disabled:opacity-50 active:scale-95 transition-all"
+              >
+                {granting ? 'Generando...' : `Generar QR de ${grantQty} ${grantQty === 1 ? 'sello' : 'sellos'}`}
+              </button>
+            </>
+          ) : (
+            <div className="text-center">
+              <div className="inline-block bg-white p-3 rounded-2xl border-2 border-pink-200 mb-3">
+                <QRCode value={grant.url} size={180} level="M" />
+              </div>
+              <p className="text-gray-700 font-semibold">
+                {grant.stamps} {grant.stamps === 1 ? 'sello' : 'sellos'} — un solo uso
+              </p>
+              <p className="text-gray-400 text-xs mt-1">
+                Expira en <strong className={grantSeconds < 60 ? 'text-red-500' : 'text-gray-600'}>
+                  {String(Math.floor(grantSeconds / 60)).padStart(2, '0')}:{String(grantSeconds % 60).padStart(2, '0')}
+                </strong>
+              </p>
+              <button
+                onClick={() => setGrant(null)}
+                className="mt-3 text-pink-400 text-sm font-medium"
+              >
+                ← Generar otro
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Validate code */}
         <div className="bg-white rounded-2xl p-5 card-shadow">
           <h2 className="font-bold text-gray-700 mb-3">Validar código de premio</h2>
@@ -152,7 +251,7 @@ export default function AdminPage() {
             <input
               value={code}
               onChange={e => setCode(e.target.value.toUpperCase())}
-              placeholder="Ej: AB12CD"
+              placeholder="Ej: AB23CD"
               maxLength={6}
               className="flex-1 border-2 border-pink-200 rounded-xl px-3 py-2 text-center font-mono
                          font-bold text-gray-800 text-lg focus:outline-none focus:border-pink-400"

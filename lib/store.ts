@@ -14,10 +14,17 @@ export type Redemption = {
   createdAt: string;
 };
 
+export type Grant = {
+  stamps: number;
+  createdAt: string;
+};
+
 // ── In-memory fallback (dev / when KV not configured) ──────────────────────
 const memCustomers = new Map<string, Customer>();
 const memRateLimit = new Map<string, number>(); // id → expiry timestamp
 const memRedeem    = new Map<string, { data: Redemption; expiry: number }>();
+const memGrants    = new Map<string, { data: Grant; expiry: number }>();
+const memLoginFails = new Map<string, { count: number; expiry: number }>();
 const memSet       = new Set<string>();
 
 async function kvOp<T>(fn: () => Promise<T>, fallback: () => T): Promise<T> {
@@ -60,14 +67,19 @@ export async function upsertCustomer(id: string, name: string): Promise<Customer
   return c;
 }
 
-export async function addStamp(id: string): Promise<{ customer: Customer; justCompleted: boolean }> {
+export async function addStamps(
+  id: string,
+  count: number,
+  { rateLimit = true }: { rateLimit?: boolean } = {},
+): Promise<{ customer: Customer; justCompleted: boolean }> {
   const c = await getCustomer(id);
   if (!c) throw new Error('Customer not found');
 
-  c.stamps += 1;
+  c.stamps += count;
   let justCompleted = false;
-  if (c.stamps >= STAMPS_REQUIRED) {
-    c.stamps = 0;
+  // Carry over: e.g. 8 stamps + 3 bought = card completed + 1 stamp on the new card
+  while (c.stamps >= STAMPS_REQUIRED) {
+    c.stamps -= STAMPS_REQUIRED;
     c.totalCompleted += 1;
     justCompleted = true;
   }
@@ -77,9 +89,12 @@ export async function addStamp(id: string): Promise<{ customer: Customer; justCo
     async () => {
       const kv = await getKV();
       await kv.set(`customer:${id}`, c);
-      await kv.set(`rl:${id}`, '1', { ex: 7200 });
+      if (rateLimit) await kv.set(`rl:${id}`, '1', { ex: 7200 });
     },
-    () => { memCustomers.set(id, c); memRateLimit.set(id, expiry); },
+    () => {
+      memCustomers.set(id, c);
+      if (rateLimit) memRateLimit.set(id, expiry);
+    },
   );
   return { customer: c, justCompleted };
 }
@@ -122,6 +137,80 @@ export async function deleteRedemption(code: string): Promise<void> {
   await kvOp(
     async () => { const kv = await getKV(); await kv.del(`redeem:${code}`); },
     () => { memRedeem.delete(code); },
+  );
+}
+
+// ── Stamp grants (single-use QR issued by the cashier, 1-N stamps) ──────────
+const GRANT_TTL_S = 600; // 10 min to scan it
+
+export async function createGrant(code: string, stamps: number): Promise<void> {
+  const data: Grant = { stamps, createdAt: new Date().toISOString() };
+  await kvOp(
+    async () => { const kv = await getKV(); await kv.set(`grant:${code}`, data, { ex: GRANT_TTL_S }); },
+    () => { memGrants.set(code, { data, expiry: Date.now() + GRANT_TTL_S * 1000 }); },
+  );
+}
+
+/** Returns the grant and deletes it (single use), or null if missing/expired. */
+export async function consumeGrant(code: string): Promise<Grant | null> {
+  return kvOp(
+    async () => {
+      const kv = await getKV();
+      const data = await kv.get<Grant>(`grant:${code}`);
+      if (data) await kv.del(`grant:${code}`);
+      return data;
+    },
+    () => {
+      const entry = memGrants.get(code);
+      if (!entry) return null;
+      memGrants.delete(code);
+      if (Date.now() > entry.expiry) return null;
+      return entry.data;
+    },
+  );
+}
+
+// ── Admin login throttling (per IP) ─────────────────────────────────────────
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_BLOCK_S = 900; // 15 min
+
+export async function isLoginBlocked(ip: string): Promise<boolean> {
+  return kvOp(
+    async () => {
+      const kv = await getKV();
+      const fails = await kv.get<number>(`loginfail:${ip}`);
+      return (fails ?? 0) >= LOGIN_MAX_FAILS;
+    },
+    () => {
+      const entry = memLoginFails.get(ip);
+      if (!entry || Date.now() > entry.expiry) return false;
+      return entry.count >= LOGIN_MAX_FAILS;
+    },
+  );
+}
+
+export async function recordLoginFail(ip: string): Promise<void> {
+  await kvOp(
+    async () => {
+      const kv = await getKV();
+      const fails = await kv.incr(`loginfail:${ip}`);
+      if (fails === 1) await kv.expire(`loginfail:${ip}`, LOGIN_BLOCK_S);
+    },
+    () => {
+      const entry = memLoginFails.get(ip);
+      if (!entry || Date.now() > entry.expiry) {
+        memLoginFails.set(ip, { count: 1, expiry: Date.now() + LOGIN_BLOCK_S * 1000 });
+      } else {
+        entry.count += 1;
+      }
+    },
+  );
+}
+
+export async function clearLoginFails(ip: string): Promise<void> {
+  await kvOp(
+    async () => { const kv = await getKV(); await kv.del(`loginfail:${ip}`); },
+    () => { memLoginFails.delete(ip); },
   );
 }
 

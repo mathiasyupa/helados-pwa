@@ -2,9 +2,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'react-qr-code';
+import { useConfig } from '@/lib/useConfig';
 
 export default function QRKioskPage() {
   const router = useRouter();
+  const config = useConfig();
   const [qrUrl, setQrUrl] = useState('');
   const [seconds, setSeconds] = useState(300);
   const [loading, setLoading] = useState(true);
@@ -49,7 +51,7 @@ export default function QRKioskPage() {
       {/* Title */}
       <div className="text-center">
         <p className="text-white/60 text-sm font-medium uppercase tracking-widest">
-          Heladería El Paraíso
+          {config.businessName}
         </p>
         <h1 className="text-white text-2xl font-bold mt-1">🍦 Escanea y gana sellos</h1>
       </div>

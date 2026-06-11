@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCustomer, createRedemption } from '@/lib/store';
+import { randomCode } from '@/lib/codes';
 import { STAMPS_REQUIRED } from '@/lib/config';
-
-function randomCode(): string {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
 
 export async function POST(req: NextRequest) {
   try {

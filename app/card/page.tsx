@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { useConfig } from '@/lib/useConfig';
 
 type CardData = {
   id: string;
@@ -9,8 +10,6 @@ type CardData = {
   stamps: number;
   totalCompleted: number;
 };
-
-const TOTAL = 10;
 
 function StampCircle({ filled, index, animate }: { filled: boolean; index: number; animate: boolean }) {
   return (
@@ -31,6 +30,8 @@ function StampCircle({ filled, index, animate }: { filled: boolean; index: numbe
 
 function CardContent() {
   const router = useRouter();
+  const config = useConfig();
+  const TOTAL = config.stampsRequired;
   const params = useSearchParams();
   const justEarned = params.get('new') === '1';
   const justCompleted = params.get('completed') === '1';
@@ -166,7 +167,7 @@ function CardContent() {
           <div className="flex items-center gap-3">
             <span className="text-4xl">🍦</span>
             <div>
-              <h1 className="font-bold text-lg leading-tight">Heladería El Paraíso</h1>
+              <h1 className="font-bold text-lg leading-tight">{config.businessName}</h1>
               <p className="text-pink-100 text-sm">Hola, {card.name} 👋</p>
             </div>
           </div>
@@ -205,7 +206,7 @@ function CardContent() {
           {/* Prize info */}
           <div className="bg-pink-50 rounded-2xl p-4 mb-4 border border-pink-100">
             <p className="text-xs text-pink-400 font-semibold uppercase tracking-wider mb-1">Tu premio</p>
-            <p className="text-gray-700 font-semibold">1 helado doble gratis 🍦</p>
+            <p className="text-gray-700 font-semibold">{config.rewardText}</p>
           </div>
 
           {/* Redeem button */}

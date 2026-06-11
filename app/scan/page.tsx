@@ -1,21 +1,25 @@
 'use client';
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useConfig } from '@/lib/useConfig';
 
 type State = 'loading' | 'need-name' | 'confirm' | 'scanning' | 'success' | 'error' | 'no-token';
 
 function ScanContent() {
   const router = useRouter();
   const params = useSearchParams();
+  const config = useConfig();
   const token = params.get('t') ?? '';
+  const grant = params.get('g') ?? '';
 
   const [state, setState] = useState<State>('loading');
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [stampsAdded, setStampsAdded] = useState(1);
 
   useEffect(() => {
-    if (!token) { setState('no-token'); return; }
+    if (!token && !grant) { setState('no-token'); return; }
     const id = localStorage.getItem('customerId');
     if (id) {
       setCustomerId(id);
@@ -23,7 +27,7 @@ function ScanContent() {
     } else {
       setState('need-name');
     }
-  }, [token]);
+  }, [token, grant]);
 
   async function registerAndScan() {
     if (!name.trim()) return;
@@ -47,7 +51,7 @@ function ScanContent() {
     const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, customerId: cid }),
+      body: JSON.stringify(grant ? { grant, customerId: cid } : { token, customerId: cid }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -55,6 +59,7 @@ function ScanContent() {
       setMessage(data.error ?? 'No se pudo añadir el sello.');
       return;
     }
+    setStampsAdded(data.stampsAdded ?? 1);
     setState('success');
     setTimeout(() => {
       router.replace(data.justCompleted ? '/card?completed=1' : '/card?new=1');
@@ -122,14 +127,18 @@ function ScanContent() {
     <div className="min-h-dvh flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm bg-white rounded-3xl p-8 card-shadow bounce-in text-center">
         <div className="text-6xl mb-4">🍦</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Heladería El Paraíso</h2>
-        <p className="text-gray-500 mb-8">¿Confirmas tu visita para ganar un sello?</p>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">{config.businessName}</h2>
+        <p className="text-gray-500 mb-8">
+          {grant
+            ? '¿Confirmas tu compra para recibir tus sellos?'
+            : '¿Confirmas tu visita para ganar un sello?'}
+        </p>
         <button
           onClick={() => doScan()}
           className="w-full gradient-btn text-white font-bold py-4 rounded-2xl text-lg
                      active:scale-95 transition-all"
         >
-          ✅ Confirmar y ganar sello
+          {grant ? '✅ Recibir mis sellos' : '✅ Confirmar y ganar sello'}
         </button>
         <button
           onClick={() => router.push('/card')}
@@ -144,14 +153,16 @@ function ScanContent() {
   if (state === 'scanning') return (
     <div className="min-h-dvh flex flex-col items-center justify-center gap-4">
       <span className="text-6xl animate-bounce">🍦</span>
-      <p className="text-gray-600 font-medium">Añadiendo sello...</p>
+      <p className="text-gray-600 font-medium">Añadiendo {grant ? 'sellos' : 'sello'}...</p>
     </div>
   );
 
   if (state === 'success') return (
     <div className="min-h-dvh flex flex-col items-center justify-center gap-4">
       <div className="text-8xl bounce-in">🎉</div>
-      <p className="text-2xl font-bold text-gray-700">¡Sello añadido!</p>
+      <p className="text-2xl font-bold text-gray-700">
+        {stampsAdded > 1 ? `¡${stampsAdded} sellos añadidos!` : '¡Sello añadido!'}
+      </p>
       <p className="text-gray-400 text-sm">Redirigiendo a tu tarjeta...</p>
     </div>
   );
