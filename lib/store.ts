@@ -5,6 +5,7 @@ export type Customer = {
   name: string;
   stamps: number;
   totalCompleted: number;
+  unclaimedRewards: number; // prizes earned but not yet redeemed
   createdAt: string;
 };
 
@@ -54,7 +55,7 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 export async function upsertCustomer(id: string, name: string): Promise<Customer> {
   const existing = await getCustomer(id);
   if (existing) return existing;
-  const c: Customer = { id, name, stamps: 0, totalCompleted: 0, createdAt: new Date().toISOString() };
+  const c: Customer = { id, name, stamps: 0, totalCompleted: 0, unclaimedRewards: 0, createdAt: new Date().toISOString() };
 
   await kvOp(
     async () => {
@@ -81,6 +82,7 @@ export async function addStamps(
   while (c.stamps >= STAMPS_REQUIRED) {
     c.stamps -= STAMPS_REQUIRED;
     c.totalCompleted += 1;
+    c.unclaimedRewards = (c.unclaimedRewards ?? 0) + 1;
     justCompleted = true;
   }
 
@@ -137,6 +139,16 @@ export async function deleteRedemption(code: string): Promise<void> {
   await kvOp(
     async () => { const kv = await getKV(); await kv.del(`redeem:${code}`); },
     () => { memRedeem.delete(code); },
+  );
+}
+
+export async function decrementUnclaimedReward(id: string): Promise<void> {
+  const c = await getCustomer(id);
+  if (!c) return;
+  c.unclaimedRewards = Math.max(0, (c.unclaimedRewards ?? 1) - 1);
+  await kvOp(
+    async () => { const kv = await getKV(); await kv.set(`customer:${id}`, c); },
+    () => { memCustomers.set(id, c); },
   );
 }
 

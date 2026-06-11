@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken } from '@/lib/auth';
-import { getRedemption, deleteRedemption } from '@/lib/store';
+import { getRedemption, deleteRedemption, decrementUnclaimedReward } from '@/lib/store';
 
 export async function POST(req: NextRequest) {
   if (!await verifyAdminToken(req)) {
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       );
     }
     await deleteRedemption(code.toUpperCase());
+    await decrementUnclaimedReward(redemption.customerId);
     return NextResponse.json({ ok: true, customerName: redemption.customerName });
   } catch (e) {
     console.error(e);

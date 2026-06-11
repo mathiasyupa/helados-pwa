@@ -62,7 +62,11 @@ function ScanContent() {
     setStampsAdded(data.stampsAdded ?? 1);
     setState('success');
     setTimeout(() => {
-      router.replace(data.justCompleted ? '/card?completed=1' : '/card?new=1');
+      if (data.justCompleted && data.code) {
+        router.replace(`/premio?code=${data.code}`);
+      } else {
+        router.replace('/card?new=1');
+      }
     }, 1500);
   }
 

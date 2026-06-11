@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCustomer, createRedemption } from '@/lib/store';
 import { randomCode } from '@/lib/codes';
-import { STAMPS_REQUIRED } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,8 +10,8 @@ export async function POST(req: NextRequest) {
     const customer = await getCustomer(customerId);
     if (!customer) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
-    if (customer.stamps < STAMPS_REQUIRED) {
-      return NextResponse.json({ error: 'Tarjeta incompleta' }, { status: 400 });
+    if ((customer.unclaimedRewards ?? 0) < 1) {
+      return NextResponse.json({ error: 'No tienes premios pendientes' }, { status: 400 });
     }
 
     const code = randomCode();

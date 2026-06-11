@@ -9,6 +9,7 @@ type CardData = {
   name: string;
   stamps: number;
   totalCompleted: number;
+  unclaimedRewards: number;
 };
 
 function StampCircle({ filled, index, animate }: { filled: boolean; index: number; animate: boolean }) {
@@ -176,10 +177,10 @@ function CardContent() {
         {/* Body */}
         <div className="p-6">
           <p className="text-center text-gray-500 text-sm mb-4 font-medium">
-            {filled === 0
+            {(card.unclaimedRewards ?? 0) > 0
+              ? '🎉 ¡Tienes un premio pendiente! Reclámalo abajo'
+              : filled === 0
               ? '¡Escanea el QR para ganar tu primer sello!'
-              : filled >= TOTAL
-              ? '🎉 ¡Tarjeta completa! Reclama tu premio'
               : `${filled} de ${TOTAL} sellos — te ${remaining > 1 ? `faltan ${remaining}` : 'falta 1'}`}
           </p>
 
@@ -209,15 +210,15 @@ function CardContent() {
             <p className="text-gray-700 font-semibold">{config.rewardText}</p>
           </div>
 
-          {/* Redeem button */}
-          {filled >= TOTAL && (
+          {/* Redeem button — shown when there are unclaimed prizes */}
+          {(card.unclaimedRewards ?? 0) > 0 && (
             <button
               onClick={handleRedeem}
               disabled={redeeming}
               className="w-full gradient-btn text-white font-bold py-4 rounded-2xl text-lg
                          disabled:opacity-50 active:scale-95 transition-all"
             >
-              {redeeming ? 'Generando...' : '🎁 Reclamar mi premio'}
+              {redeeming ? 'Generando...' : `🎁 Reclamar premio${(card.unclaimedRewards ?? 0) > 1 ? ` (${card.unclaimedRewards})` : ''}`}
             </button>
           )}
 
